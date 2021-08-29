@@ -4,28 +4,32 @@
 #include <memory>
 #include <utility>
 #include <array>
+#include <map>
 
 
 template<typename T>
 using Rc = std::shared_ptr<T>;
 
-
+template <typename K, typename V>
 struct AVLNode {
     int height;
-    int key;
-    Rc<AVLNode> left, right;
+    K key;
+    V val;
+    Rc<AVLNode<K, V>> left, right;
 
-    AVLNode(int height, int key, Rc<AVLNode> left, Rc<AVLNode> right):
+    AVLNode(int height, K key, V val, Rc<AVLNode<K, V>> left, Rc<AVLNode<K, V>> right):
         height{height},
-        key{key},
-        left{left},
-        right{right} {}
+        key{std::move(key)},
+        val{std::move(val)},
+        left{std::move(left)},
+        right{std::move(right)} {}
 
-    AVLNode(int key, Rc<AVLNode> left=nullptr, Rc<AVLNode> right=nullptr):
+    AVLNode(K key, V val, Rc<AVLNode<K, V>> left=nullptr, Rc<AVLNode<K, V>> right=nullptr):
         height{1 + std::max(left ? left->height : 0, right ? right->height : 0)},
-        key{key},
-        left{left},
-        right{right} {}
+        key{std::move(key)},
+        val{std::move(val)},
+        left{std::move(left)},
+        right{std::move(right)} {}
     
     void update_height_without_null_check() {
         height = std::max(left->height, right->height) + 1;
@@ -36,11 +40,15 @@ struct AVLNode {
     }
 };
 
-inline int get_height(const Rc<AVLNode> &node) {
+
+template <typename K, typename V>
+inline int get_height(const Rc<AVLNode<K, V>> &node) {
     return node ? node->height : 0;
 }
 
-inline Rc<AVLNode> rewrite_ll(Rc<AVLNode> root, Rc<AVLNode> l, Rc<AVLNode> ll) {
+
+template <typename K, typename V>
+inline Rc<AVLNode<K, V>> rewrite_ll(Rc<AVLNode<K, V>> root, Rc<AVLNode<K, V>> l, Rc<AVLNode<K, V>> ll) {
     auto &c = l->right;
 
     root->left = std::move(c);
@@ -53,7 +61,8 @@ inline Rc<AVLNode> rewrite_ll(Rc<AVLNode> root, Rc<AVLNode> l, Rc<AVLNode> ll) {
     return l;
 }
 
-inline Rc<AVLNode> rewrite_lr(Rc<AVLNode> root, Rc<AVLNode> l, Rc<AVLNode> lr) {
+template <typename K, typename V>
+inline Rc<AVLNode<K, V>> rewrite_lr(Rc<AVLNode<K, V>> root, Rc<AVLNode<K, V>> l, Rc<AVLNode<K, V>> lr) {
     auto &b = lr->left;
     auto &c = lr->right;
 
@@ -71,7 +80,8 @@ inline Rc<AVLNode> rewrite_lr(Rc<AVLNode> root, Rc<AVLNode> l, Rc<AVLNode> lr) {
 }
 
 
-inline Rc<AVLNode> rewrite_rl(Rc<AVLNode> root, Rc<AVLNode> r, Rc<AVLNode> rl) {
+template <typename K, typename V>
+inline Rc<AVLNode<K, V>> rewrite_rl(Rc<AVLNode<K, V>> root, Rc<AVLNode<K, V>> r, Rc<AVLNode<K, V>> rl) {
     auto &b = rl->left;
     auto &c = rl->right;
 
@@ -88,7 +98,8 @@ inline Rc<AVLNode> rewrite_rl(Rc<AVLNode> root, Rc<AVLNode> r, Rc<AVLNode> rl) {
     return rl;
 }
 
-inline Rc<AVLNode> rewrite_rr(Rc<AVLNode> root, Rc<AVLNode> r, Rc<AVLNode> rr) {
+template <typename K, typename V>
+inline Rc<AVLNode<K, V>> rewrite_rr(Rc<AVLNode<K, V>> root, Rc<AVLNode<K, V>> r, Rc<AVLNode<K, V>> rr) {
     auto &b = r->left;
 
     root->right = std::move(b);
@@ -102,32 +113,33 @@ inline Rc<AVLNode> rewrite_rr(Rc<AVLNode> root, Rc<AVLNode> r, Rc<AVLNode> rr) {
 }
 
 
-Rc<AVLNode> insert(Rc<AVLNode> root, int key) {
-    Rc<AVLNode> *path[48];
+template <typename K, typename V>
+Rc<AVLNode<K, V>> insert(AVLNode<K, V> *root, K key, V val) {
+    Rc<AVLNode<K, V>> *path[48];
     int n = 0;
-    Rc<AVLNode> new_root = nullptr;
+    Rc<AVLNode<K, V>> new_root = nullptr;
     auto ptr = &new_root;
 
     while (root) {
         if (key < root->key) {
-            *ptr = std::make_shared<AVLNode>(root->height, root->key, nullptr, root->right);
+            *ptr = std::make_shared<AVLNode<K, V>>(root->height, root->key, root->val, nullptr, root->right);
             path[n++] = ptr;
             ptr = &(*ptr)->left;
-            root = root->left;
+            root = root->left.get();
         }
         else if (root->key < key) {
-            *ptr = std::make_shared<AVLNode>(root->height, root->key, root->left, nullptr);
+            *ptr = std::make_shared<AVLNode<K, V>>(root->height, root->key, root->val, root->left, nullptr);
             path[n++] = ptr;
             ptr = &(*ptr)->right;
-            root = root->right;
+            root = root->right.get();
         }
         else {
-            *ptr = std::make_shared<AVLNode>(root->height, key, root->left, root->right);
+            *ptr = std::make_shared<AVLNode<K, V>>(root->height, std::move(key), std::move(val), root->left, root->right);
             return new_root;
         }
     }
 
-    *ptr = std::make_shared<AVLNode>(key);
+    *ptr = std::make_shared<AVLNode<K, V>>(std::move(key), std::move(val));
     if (n == 0) {
         return *ptr;
     }
@@ -195,7 +207,8 @@ Rc<AVLNode> insert(Rc<AVLNode> root, int key) {
 
 
 
-int size(Rc<AVLNode> avl) {
+template <typename K, typename V>
+int size(Rc<AVLNode<K, V>> avl) {
     return avl ? 1 + size(avl->left) + size(avl->right) : 0;
 }
 
@@ -203,7 +216,11 @@ int size(Rc<AVLNode> avl) {
 #include <random>
 #include <unordered_set>
 
-void print_avl_helper(Rc<AVLNode> avl) {
+
+using TestNode = Rc<AVLNode<int, int>>;
+
+
+void print_avl_helper(TestNode avl) {
     if (avl) {
         print_avl_helper(avl->left);
         printf("%d ", avl->key);
@@ -211,7 +228,7 @@ void print_avl_helper(Rc<AVLNode> avl) {
     }
 }
 
-void print_avl(Rc<AVLNode> avl) {
+void print_avl(TestNode avl) {
     print_avl_helper(avl);
     putc('\n', stdout);
     fflush(stdout);
@@ -225,7 +242,7 @@ namespace _test {
         }
     }
     
-    void validate_order(Rc<AVLNode> root, int64_t low=INT64_MIN, int64_t high=INT64_MAX) {
+    void validate_order(TestNode root, int64_t low=INT64_MIN, int64_t high=INT64_MAX) {
         if (root) {
             assert(low < (int64_t)root->key && (int64_t)root->key < high, "order error\n");
             if (root->left) {
@@ -237,7 +254,7 @@ namespace _test {
         }
     }
 
-    int validate_height(Rc<AVLNode> root) {
+    int validate_height(TestNode root) {
         if (!root) {
             return 0;
         }
@@ -248,7 +265,7 @@ namespace _test {
 
 
     void test_insert(int n) {
-        std::vector<Rc<AVLNode>> trees(1, nullptr);
+        std::vector<TestNode> trees(1, nullptr);
         std::default_random_engine e{};
 
         std::unordered_set<int> numbers_set;
@@ -259,10 +276,10 @@ namespace _test {
         for (int i = 0; i < n; ++i) {
             auto last = trees.back();
             int key = numbers[i];
-            auto new_avl = insert(last, key);
+            auto new_avl = insert(last.get(), key, 0);
             trees.push_back(new_avl);
 
-            auto avl_with_same_key = insert(new_avl, numbers[std::uniform_int_distribution<int>(0, i)(e)]);
+            auto avl_with_same_key = insert(new_avl.get(), numbers[std::uniform_int_distribution<int>(0, i)(e)], 0);
             assert(size(avl_with_same_key) == i + 1, "size -- insert same");
             validate_order(avl_with_same_key);
             validate_height(avl_with_same_key);
@@ -281,10 +298,5 @@ namespace _test {
 int main(int argc, char **argv) {
     int n = atoi(argv[1]);
     _test::test_insert(n);
-
-    Rc<AVLNode> a;
-    auto b = insert(a, 1);
-    auto c = insert(b, 2);
-    auto d = insert(c, 3);
 }
 

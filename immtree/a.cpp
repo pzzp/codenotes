@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <utility>
+#include <map>
 
 struct A {
     A() = default;
@@ -16,6 +17,7 @@ void f(A a) {
 }
 
 int main() {
+    printf("%d\n", sizeof(std::map<int, int>::iterator));
     A a;
     A &b = a;
     f(std::move(b));
